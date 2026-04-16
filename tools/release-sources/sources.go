@@ -107,7 +107,7 @@ func fetchPyxis(gl *GitLabClient) SourceData {
 
 	content, err := gl.FileContent(pyxisProject, pyxisFilePath, pyxisBranch)
 	if err != nil {
-		progressResult("(unavailable)")
+		progressResult("(unavailable — are you connected to the VPN?)")
 		return sd
 	}
 
@@ -262,7 +262,7 @@ func fetchKonfluxAdvisory(gl *GitLabClient, suffix, kind string) SourceData {
 	filePath := fmt.Sprintf("%s/oadp-advisory-%s-%s.yaml", konfluxRPADir, kind, suffix)
 	content, err := gl.FileContent(konfluxProject, filePath, "main")
 	if err != nil {
-		progressResult("(unavailable)")
+		progressResult("(unavailable — are you connected to the VPN?)")
 		return sd
 	}
 
