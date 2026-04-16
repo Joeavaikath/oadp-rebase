@@ -24,14 +24,15 @@ const (
 )
 
 // exceptions are repos skipped entirely from comparison (known special cases).
-var exceptions = map[string]bool{
-	"oadp/oadp-cli-rhel9":                                  true,
-	"oadp/oadp-filebrowser-rhel9":                          true,
-	"oadp/oadp-vmdp-rhel9":                                 true,
-	"oadp/kubevirt-velero-plugin-rhel9":                     true,
-	"oadp/oadp-operator-bundle":                             true,
-	"oadp/oadp-kubevirt-velero-annotations-remover-rhel9":   true,
-	"oadp/oadp-kubevirt-datamover-monitor-rhel9":            true,
+// The value is the reason for skipping.
+var exceptions = map[string]string{
+	"oadp/oadp-cli-rhel9":                                "renamed to oadp-cli-binaries-rhel9",
+	"oadp/oadp-filebrowser-rhel9":                        "renamed to oadp-vmfr-access-filebrowser-rhel9",
+	"oadp/oadp-vmdp-rhel9":                               "renamed to oadp-vmdp-binaries-rhel9",
+	"oadp/kubevirt-velero-plugin-rhel9":                   "missing oadp- prefix, replaced by oadp-kubevirt-velero-plugin-rhel9",
+	"oadp/oadp-operator-bundle":                          "bundle metadata, not a shipped image",
+	"oadp/oadp-kubevirt-velero-annotations-remover-rhel9": "internal tool, not released",
+	"oadp/oadp-kubevirt-datamover-monitor-rhel9":          "internal tool, not released",
 }
 
 // noPyxis are repos that are not expected to be in Pyxis (defined elsewhere).
@@ -303,7 +304,7 @@ func BuildUnion(src *Sources) []string {
 
 	var repos []string
 	for repo := range all {
-		if !exceptions[repo] {
+		if _, excluded := exceptions[repo]; !excluded {
 			repos = append(repos, repo)
 		}
 	}
@@ -356,7 +357,7 @@ func FindIssues(src *Sources, repos []string) []Issue {
 	}
 
 	for repo, delivery := range src.OBDDelivery {
-		if exceptions[repo] {
+		if _, excluded := exceptions[repo]; excluded {
 			continue
 		}
 		if !deliveryMatch(delivery, repo) {

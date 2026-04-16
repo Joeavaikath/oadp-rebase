@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -78,6 +79,26 @@ func RenderTable(w io.Writer, branch string, src *Sources, repos []string, issue
 
 	// Pipeline diagram
 	renderPipeline(w)
+
+	// Exceptions
+	if skipped > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s%sExceptions (%d skipped)%s\n", cBold, cCyan, skipped, cReset)
+		fmt.Fprintln(w, strings.Repeat("═", 70))
+		fmt.Fprintln(w)
+
+		// Sort exception keys for stable output
+		excKeys := make([]string, 0, len(exceptions))
+		for k := range exceptions {
+			excKeys = append(excKeys, k)
+		}
+		sort.Strings(excKeys)
+
+		for _, repo := range excKeys {
+			reason := exceptions[repo]
+			fmt.Fprintf(w, "  %s%-52s%s  %s%s%s\n", cDim, repo, cReset, cYellow, reason, cReset)
+		}
+	}
 
 	// Comparison matrix
 	fmt.Fprintln(w)
@@ -261,13 +282,19 @@ func RenderJSON(w io.Writer, branch string, src *Sources, repos []string, issues
 		InSources string `json:"in_sources,omitempty"`
 	}
 
+	type jsonException struct {
+		Repo   string `json:"repo"`
+		Reason string `json:"reason"`
+	}
+
 	type jsonOutput struct {
-		Branch  string       `json:"branch"`
-		Time    string       `json:"time"`
-		Sources []jsonSource `json:"sources"`
-		Repos   []jsonRepo   `json:"repos"`
-		Issues  []jsonIssue  `json:"issues"`
-		Score   struct {
+		Branch     string          `json:"branch"`
+		Time       string          `json:"time"`
+		Sources    []jsonSource    `json:"sources"`
+		Repos      []jsonRepo      `json:"repos"`
+		Exceptions []jsonException `json:"exceptions"`
+		Issues     []jsonIssue     `json:"issues"`
+		Score      struct {
 			InSync  int `json:"in_sync"`
 			Total   int `json:"total"`
 			Percent int `json:"percent"`
@@ -285,6 +312,18 @@ func RenderJSON(w io.Writer, branch string, src *Sources, repos []string, issues
 			Available: sd.Available,
 			Count:     len(sd.Repos),
 			Detail:    sd.Detail,
+		})
+	}
+
+	excKeys := make([]string, 0, len(exceptions))
+	for k := range exceptions {
+		excKeys = append(excKeys, k)
+	}
+	sort.Strings(excKeys)
+	for _, repo := range excKeys {
+		out.Exceptions = append(out.Exceptions, jsonException{
+			Repo:   repo,
+			Reason: exceptions[repo],
 		})
 	}
 
