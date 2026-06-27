@@ -179,7 +179,7 @@ jobs:
             echo "::warning title=Verify (${TARGET})::Post-push verification failed (rc=${verify_rc})"
           fi
 
-          # Post comment to PR
+          # Post comment to PR (best-effort — may lack permissions on external repos)
           [ -z "$PR_URL" ] && exit 0
           [ ! -f "$COMMENT_FILE" ] && exit 0
 
@@ -192,9 +192,9 @@ jobs:
             --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" 2>/dev/null | head -1)
 
           if [ -n "$existing" ]; then
-            gh api "repos/${pr_repo}/issues/comments/${existing}" -X PATCH -f body="$body"
+            gh api "repos/${pr_repo}/issues/comments/${existing}" -X PATCH -f body="$body" || echo "::warning::Could not update PR comment (missing permissions on ${pr_repo})"
           else
-            gh api "repos/${pr_repo}/issues/${pr_number}/comments" -f body="$body"
+            gh api "repos/${pr_repo}/issues/${pr_number}/comments" -f body="$body" || echo "::warning::Could not post PR comment (missing permissions on ${pr_repo})"
           fi
 
       - name: Job summary

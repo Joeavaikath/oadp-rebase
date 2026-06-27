@@ -419,11 +419,9 @@ jobs:
             --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" 2>/dev/null | head -1)
 
           if [ -n "$existing" ]; then
-            gh api "repos/${pr_repo}/issues/comments/${existing}" -X PATCH -f body="$body"
-            echo "Updated existing verification comment"
+            gh api "repos/${pr_repo}/issues/comments/${existing}" -X PATCH -f body="$body" || echo "::warning::Could not update PR comment (missing permissions on ${pr_repo})"
           else
-            gh api "repos/${pr_repo}/issues/${pr_number}/comments" -f body="$body"
-            echo "Posted verification comment"
+            gh api "repos/${pr_repo}/issues/${pr_number}/comments" -f body="$body" || echo "::warning::Could not post PR comment (missing permissions on ${pr_repo})"
           fi
 
       # ── Phase 5: Result reporting ────────────────────────────
