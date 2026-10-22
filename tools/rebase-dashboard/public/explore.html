@@ -192,7 +192,6 @@ a { color: inherit; }
 .stack-lead p { margin: 0; font-size: 12px; color: var(--faint); }
 
 .canvas { position: relative; }
-#edges { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: visible; }
 
 .stage {
   position: relative; z-index: 1;
@@ -292,19 +291,6 @@ a { color: inherit; }
 .chip.stuck { background: var(--crit-soft); color: var(--crit); }
 .chip.drift { background: var(--ok-soft); color: var(--ok); }
 .chip.cve { background: var(--crit-soft); color: var(--crit); }
-
-.waits {
-  margin-top: 7px; padding-top: 6px; border-top: 1px dashed var(--line-soft);
-  font-size: 10.5px; color: var(--muted); line-height: 1.45;
-  display: flex; gap: 5px; align-items: flex-start;
-}
-.waits .names { min-width: 0; }
-.waits-label {
-  flex: none; font-size: 9px; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--faint); padding-top: 1px;
-}
-.waits .n-now { color: var(--now); font-weight: 600; }
-.waits .n-pending { color: var(--wait); }
 
 /* ---------------- nothing-to-do footer ---------------- */
 .rest {
@@ -407,7 +393,6 @@ details.notes summary:hover { background: var(--surface-2); }
   .card { width: 100%; }
   .now { padding: 14px; }
   .now-stats { gap: 18px; }
-  #edges { display: none; }
   .stage { grid-template-columns: 20px 1fr; gap: 0 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -446,7 +431,6 @@ details.notes summary:hover { background: var(--surface-2); }
     <p>Each stage clears once the stages above it land. Order comes from live dependency state, not the declared wave.</p>
   </div>
   <div class="canvas" id="canvas">
-    <svg id="edges" aria-hidden="true"></svg>
     <div id="stages"></div>
   </div>
   <div class="rest" id="rest" hidden></div>
@@ -822,7 +806,8 @@ function renderStages(m) {
   }
 
   renderRest(m);
-  requestAnimationFrame(() => drawEdges(m));
+  // No connector lines: the stack order carries the dependency, and drawing
+  // every edge produced a web of crossing curves that obscured it.
 }
 
 function card(m, id) {
@@ -871,34 +856,6 @@ function card(m, id) {
   }
   node.append(meta);
 
-  const b = m.blockers.get(id) || [];
-  const drifts = m.driftUp.get(id) || [];
-  if (b.length) {
-    const w = el('div', 'waits');
-    w.append(el('span', 'waits-label', 'waits on'));
-    const names = el('span', 'names');
-    b.slice(0, 3).forEach((bid, i) => {
-      if (i) names.append(document.createTextNode(', '));
-      const span = el('span', m.stage.get(bid) === 0 ? 'n-now' : 'n-pending', short(bid));
-      names.append(span);
-    });
-    if (b.length > 3) names.append(document.createTextNode(`, +${b.length - 3}`));
-    w.append(names);
-    node.append(w);
-  } else if (drifts.length) {
-    // In sync now, so nothing blocks it — it just follows whatever it consumes.
-    const w = el('div', 'waits');
-    w.append(el('span', 'waits-label', 'drifts with'));
-    const names = el('span', 'names');
-    drifts.slice(0, 3).forEach((bid, i) => {
-      if (i) names.append(document.createTextNode(', '));
-      names.append(el('span', 'n-pending', short(bid)));
-    });
-    if (drifts.length > 3) names.append(document.createTextNode(`, +${drifts.length - 3}`));
-    w.append(names);
-    node.append(w);
-  }
-
   const open = () => { state.selected = state.selected === id ? null : id; redraw(m); };
   node.addEventListener('click', open);
   node.addEventListener('keydown', e => {
@@ -939,68 +896,6 @@ function renderRest(m) {
       list.append(i);
     }
     box.append(list);
-  }
-}
-
-/* ============================ edges =========================== */
-
-function drawEdges(m) {
-  const svg = document.getElementById('edges');
-  const canvas = document.getElementById('canvas');
-  if (!canvas || !svg) return;
-  svg.replaceChildren();
-
-  const boxes = new Map();
-  for (const node of canvas.querySelectorAll('.card')) {
-    const b = node.getBoundingClientRect();
-    boxes.set(node.dataset.id, b);
-  }
-  if (!boxes.size) return;
-
-  const cb = canvas.getBoundingClientRect();
-  svg.setAttribute('width', cb.width);
-  svg.setAttribute('height', cb.height);
-  svg.setAttribute('viewBox', `0 0 ${cb.width} ${cb.height}`);
-
-  const rel = id => {
-    const b = boxes.get(id);
-    if (!b) return null;
-    return {
-      cx: b.left - cb.left + b.width / 2,
-      top: b.top - cb.top,
-      bottom: b.top - cb.top + b.height,
-    };
-  };
-
-  for (const [id, deps] of m.deps) {
-    const target = rel(id);
-    if (!target) continue;
-    for (const [depId, v] of deps) {
-      // Blocking edges always draw. In-sync edges draw only when both ends are
-      // cards, i.e. the consumer is on the top edge and will drift.
-      const src = rel(depId);
-      if (!src) continue;
-      const drift = v.in_sync;
-      if (drift && !m.drifting.has(id)) continue;
-      const active = !state.selected || state.selected === id || state.selected === depId;
-
-      const x1 = src.cx, y1 = src.bottom;
-      const x2 = target.cx, y2 = target.top;
-      const dy = Math.max(18, (y2 - y1) * 0.45);
-      const d = `M ${x1} ${y1} C ${x1} ${y1 + dy} ${x2} ${y2 - dy} ${x2} ${y2}`;
-
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', d);
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', drift
-        ? 'var(--ok)'
-        : (m.stage.get(depId) === 0 ? 'var(--now)' : 'var(--wait)'));
-      path.setAttribute('stroke-width', active ? (drift ? 1 : 1.6) : 1);
-      if (drift) path.setAttribute('stroke-dasharray', '3 3');
-      path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('opacity', active ? (drift ? 0.4 : 0.55) : 0.08);
-      svg.append(path);
-    }
   }
 }
 
@@ -1234,14 +1129,7 @@ document.getElementById('twiceBtn').addEventListener('click', () => {
 });
 
 /* resize redraw */
-let t;
-window.addEventListener('resize', () => {
-  clearTimeout(t);
-  t = setTimeout(() => {
-    const m = state.cache[state.branch];
-    if (m) drawEdges(m);
-  }, 120);
-});
+// No resize redraw needed: there is no edge layer to re-measure.
 
 /* boot */
 renderBranches();
