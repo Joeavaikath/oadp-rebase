@@ -291,15 +291,6 @@ a { color: inherit; }
 .chip.cve { background: var(--crit-soft); color: var(--crit); }
 .chip.via { background: transparent; color: var(--muted); border: 1px solid var(--line); }
 
-/* impact meter: share of the repos that unblock when this one lands */
-.meter {
-  margin-top: 1px; height: 3px; border-radius: 2px;
-  background: var(--surface-3); overflow: hidden;
-}
-.meter i { display: block; height: 100%; border-radius: 2px; background: var(--go); }
-.tile.s-ok .meter i { background: var(--ok); }
-.tile.s-skip .meter { visibility: hidden; }
-
 /* ---------------- foundation / notes ---------------- */
 details.panelbox {
   margin-top: 18px; border: 1px solid var(--line); border-radius: 10px;
@@ -807,7 +798,6 @@ function renderLayers(m) {
   const wrap = document.getElementById('layers');
   wrap.replaceChildren();
   const groups = buildLayers(m);
-  const maxUnblocks = Math.max(1, ...[...m.unblocks.values()].map(s => s.size));
 
   // Ready work can appear in more than one band at once — on 1.4 the two pending
   // repos sit at different depths because everything above them is already in
@@ -852,14 +842,14 @@ function renderLayers(m) {
         || m.unblocks.get(b).size - m.unblocks.get(a).size
         || a.localeCompare(b);
     });
-    for (const id of ordered) body.append(tile(m, id, g, maxUnblocks));
+    for (const id of ordered) body.append(tile(m, id, g));
 
     row.append(gutter, body);
     wrap.append(row);
   }
 }
 
-function tile(m, id, g, maxUnblocks) {
+function tile(m, id, g) {
   const r = m.byId.get(id);
   const st = m.status.get(id);
   const isP = m.isPending.get(id);
@@ -896,53 +886,46 @@ function tile(m, id, g, maxUnblocks) {
     meta.append(chip(pinnedBy.length ? `skipped · ${pinnedBy.length} still pin it` : 'skipped', 'skip'));
     if (pinnedBy.length) node.title = `${id} — skipped, but ${pinnedBy.join(', ')} still pin it out of sync`;
   } else if (!isP) {
-    meta.append(chip('in sync', 'ok'));
+    // In sync: the tile hue and the legend already say this. No chip.
   } else {
-    // What it waits on, then what it releases.
-    const waitingOn = [...(m.deps.get(id)?.entries() || [])]
-      .filter(([up]) => m.isPending.get(up)).map(([up]) => short(up));
+    // Only impact earns a chip. What it waits on is said by the band it sits in,
+    // and "ready" said nothing a bare green-or-orange tile did not already say.
     const n = m.unblocks.get(id).size;
-    meta.append(chip(
-      g.isGo ? (n ? `releases ${n}` : 'ready')
-        : waitingOn.length ? `waits on ${waitingOn.slice(0, 2).join(', ')}${waitingOn.length > 2 ? ` +${waitingOn.length - 2}` : ''}`
-        : 'ready',
-      g.isGo ? 'go' : 'wait'));
-    if (!g.isGo && n) meta.append(chip(`releases ${n}`, 'wait'));
+    if (n) meta.append(chip(`releases ${n}`, g.isGo ? 'go' : 'wait'));
   }
-  node.append(meta);
 
-  // CVE line: either what this repo carries and who would clear it, or — for an
-  // upstream — how many downstream findings its own rebase would resolve.
+  // CVE signal: at most one more chip, most consequential fact first. A finding
+  // an upstream rebase would clear matters more than the raw count, and the
+  // count matters more than how many downstream findings this rebase would fix.
   const via = m.cveVia.get(id) || [];
   const clears = m.clearsCves.get(id) || 0;
   const own = r.cves;
   const ownCount = (own?.critical || 0) + (own?.high || 0);
 
-  const cveMeta = el('div', 'tile-meta');
-  if (ownCount) {
-    cveMeta.append(chip(own.critical ? `${own.critical} critical` : `${own.high} high`, 'cve'));
-  }
-  const viaSet = new Set(via.map(v => v.upstream));
-  if (via.length) {
+  let cveChip = null;
+  if (st === 'skip') {
+    // A skipped repo has no path through the stack, so a CVE count here is
+    // context, not a signal. Keep it in the tooltip rather than a second chip.
+    if (ownCount) {
+      const sev = own.critical ? `${own.critical} critical` : `${own.high} high`;
+      node.title = `${node.title ? `${node.title} — ` : ''}${sev} CVE findings`;
+    }
+  } else if (via.length) {
     const n = via.reduce((a, v) => a + v.count, 0);
-    const names = [...viaSet].map(short).join(', ');
-    const c = chip(`${n} clears via ${names}`, 'via');
-    c.title = via.map(v => `${v.pkg} ${v.from || '?'} → ${v.to} when ${v.upstream} lands`).join('\n');
-    cveMeta.append(c);
+    const names = [...new Set(via.map(v => v.upstream))].map(short).join(', ');
+    cveChip = chip(`${n} clear with ${names}`, 'via');
+    cveChip.title = via
+      .map(v => `${v.pkg} ${v.from || '?'} → ${v.to} when ${v.upstream} lands`)
+      .join('\n');
+  } else if (clears) {
+    cveChip = chip(`clears ${clears} downstream`, 'via');
+    cveChip.title = `Rebasing this bumps shared packages past the versions ${plural(clears, 'downstream finding is', 'downstream findings are')} reported against.`;
+  } else if (ownCount) {
+    cveChip = chip(own.critical ? `${own.critical} critical` : `${own.high} high`, 'cve');
+    cveChip.title = 'No dependency in this stack vendors a fixed version of these packages — they need a direct fix.';
   }
-  if (clears) {
-    const c = chip(`clears ${clears} downstream`, 'via');
-    c.title = `Rebasing this bumps shared packages past the versions ${plural(clears, 'downstream finding is', 'downstream findings are')} reported against.`;
-    cveMeta.append(c);
-  }
-  if (cveMeta.childNodes.length) node.append(cveMeta);
-
-  const n = m.unblocks.get(id).size;
-  const meter = el('div', 'meter');
-  const fill = el('i');
-  fill.style.width = `${isP && n ? Math.max(6, Math.round((n / maxUnblocks) * 100)) : 0}%`;
-  meter.append(fill);
-  node.append(meter);
+  if (cveChip) meta.append(cveChip);
+  if (meta.childNodes.length) node.append(meta);
 
   node.addEventListener('click', () => {
     state.selected = state.selected === id ? null : id;
