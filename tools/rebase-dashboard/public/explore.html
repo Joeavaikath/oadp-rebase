@@ -265,6 +265,10 @@ a { color: inherit; }
    be rebased, so the pin never resolves. Dashed = stalled, not done. */
 .card.is-stuck { border-style: dashed; border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); }
 .card.is-stuck::before { background: var(--crit); }
+/* In sync now, but it consumes work in the stack, so it moves when that lands.
+   Shown for structure, dimmed so it never reads as work you can do today. */
+.card.is-drift { background: var(--surface-2); border-style: dashed; border-color: var(--line); opacity: .78; }
+.card.is-drift::before { background: var(--ok); }
 .card.dim { opacity: .3; }
 .card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
 
@@ -286,6 +290,7 @@ a { color: inherit; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); }
 .chip.skip { background: var(--surface-2); color: var(--faint); }
 .chip.stuck { background: var(--crit-soft); color: var(--crit); }
+.chip.drift { background: var(--ok-soft); color: var(--ok); }
 .chip.cve { background: var(--crit-soft); color: var(--crit); }
 
 .waits {
@@ -293,8 +298,11 @@ a { color: inherit; }
   font-size: 10.5px; color: var(--muted); line-height: 1.45;
   display: flex; gap: 5px; align-items: flex-start;
 }
-.waits .arrow { color: var(--faint); flex: none; font-family: "IBM Plex Mono", monospace; }
 .waits .names { min-width: 0; }
+.waits-label {
+  flex: none; font-size: 9px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--faint); padding-top: 1px;
+}
 .waits .n-now { color: var(--now); font-weight: 600; }
 .waits .n-pending { color: var(--wait); }
 
@@ -426,7 +434,7 @@ details.notes summary:hover { background: var(--surface-2); }
     <div class="now-sub" id="nowSub"></div>
   </div>
   <div class="now-actions">
-    <a class="cta" id="nowCta" href="#" target="_blank" rel="noopener noreferrer">Run rebase ↗</a>
+    <a class="cta" id="nowCta" href="#" target="_blank" rel="noopener noreferrer">Run rebase</a>
     <button class="cta ghost" id="twiceBtn" type="button">What next?</button>
   </div>
   <div class="now-stats" id="nowStats"></div>
@@ -562,6 +570,25 @@ function derive(repos, branch) {
     }
   }
 
+  // A repo that has to move: anything not in sync, a skipped repo still pinning
+  // a consumer, or an in-sync repo whose head is ahead of its consumers.
+  const needsWork = new Set(repos
+    .filter(r => (r.skip ? stale.get(r.repo) : status.get(r.repo) !== 'ok'))
+    .map(r => r.repo));
+
+  // In sync today, but it consumes something that must move — so it drifts the
+  // moment that lands. These matter structurally: 39 of 41 in-sync repo
+  // instances on these branches are wired into the stack this way. Sits one
+  // stage below its highest upstream.
+  const driftUp = new Map();
+  for (const r of repos) {
+    if (r.skip || status.get(r.repo) !== 'ok') continue;
+    const up = [...deps.get(r.repo).keys()].filter(id => needsWork.has(id));
+    if (!up.length) continue;
+    driftUp.set(r.repo, up);
+    stage.set(r.repo, Math.max(...up.map(id => stage.get(id) ?? 0)) + 1);
+  }
+
   const cve = repos.reduce((a, r) => {
     const c = r.cves;
     if (!c) return a;
@@ -569,7 +596,10 @@ function derive(repos, branch) {
     return a;
   }, { critical: 0, high: 0, fixable: 0 });
 
-  return { branch, repos, byId, deps, blockers, stage, stale, dependents, status, cve };
+  return {
+    branch, repos, byId, deps, blockers, stage, stale, dependents, status,
+    needsWork, driftUp, drifting: new Set(driftUp.keys()), cve,
+  };
 }
 
 /* ========================== helpers =========================== */
@@ -692,16 +722,17 @@ function stat(v, k, color) {
 
 /** Barycenter ordering so cards sit under the things they depend on. */
 function orderStages(m) {
-  // A repo earns a place in the stack if it needs work, OR if something
-  // downstream pins it out of sync. That second case matters: a skipped repo
-  // (restic) can still block a consumer that must rebase to pick up its head.
-  // A skipped repo earns a card only when it still pins a consumer; otherwise it
-  // belongs in the footer, not the stack.
-  const visible = id => (m.status.get(id) === 'skip'
-    ? m.stale.get(id)
-    : m.status.get(id) !== 'ok' || m.stale.get(id));
+  // A repo earns a card if it needs work, if something downstream pins it out
+  // of sync (a skipped restic still pins velero), or if it sits directly on top
+  // of the stack and so drifts the moment the stack lands. Dropping that last
+  // group hid real edges: the aws/gcp/azure plugins, oadp-cli and must-gather
+  // all consume things in the stack, so they were never disconnected.
   const isStuck = id => m.status.get(id) === 'skip' && m.stale.get(id);
-
+  const needsWork = id => m.needsWork.has(id);
+  // Top edge: in sync itself, but consumes something that needs work. Uses the
+  // model's set so the stack and the footer cannot disagree about it.
+  const drifting = m.drifting;
+  const visible = id => needsWork(id) || drifting.has(id);
   const stages = [];
   const max = Math.max(0, ...m.repos.filter(r => visible(r.repo))
     .map(r => m.stage.get(r.repo)));
@@ -712,7 +743,12 @@ function orderStages(m) {
     // canDo: stage 0 holds real work (anything above it still has blockers, and
     // a stage of nothing but dangling skips is not actionable either).
     if (ids.length) {
-      stages.push({ s, ids: ids.slice(), canDo: s === 0 && ids.some(id => !isStuck(id)) });
+      stages.push({
+        s,
+        ids: ids.slice(),
+        drifting: new Set(ids.filter(id => drifting.has(id))),
+        canDo: s === 0 && ids.some(id => !isStuck(id)),
+      });
     }
   }
 
@@ -743,7 +779,7 @@ function renderStages(m) {
   const stages = orderStages(m);
   const maxStage = stages.length - 1;
 
-  for (const { s, ids, canDo } of stages) {
+  for (const { s, ids, canDo, drifting } of stages) {
     const stage = el('div', 'stage');
     stage.className = `stage ${canDo ? 'is-now' : 'is-wait'}`;
 
@@ -753,6 +789,7 @@ function renderStages(m) {
     const body = el('div', 'stage-body');
     const head = el('div', 'stage-head');
     const frozen = ids.filter(id => m.status.get(id) === 'skip').length;
+    const drift = ids.filter(id => drifting.has(id)).length;
     // Default branch is only the frontier, i.e. nothing upstream blocks it.
     let desc = canDo
       ? (frozen
@@ -762,6 +799,9 @@ function renderStages(m) {
         ? 'Nothing here can be rebased — it only blocks the stages below.'
         : (s === 1 ? 'Clears once stage 1 lands.' : 'Clears once the stages above land.'));
     if (frozen && !canDo) desc += ' The dashed card is skipped, so its block never clears.';
+    if (drift) {
+      desc += ` ${plural(drift, 'card is', 'cards are')} in sync today but consume this work, so ${drift === 1 ? 'it drifts' : 'they drift'} once it lands.`;
+    }
     head.append(
       el('span', 'stage-num', canDo ? `Stage ${s + 1} · do now` : `Stage ${s + 1}`),
       el('span', 'stage-desc', desc),
@@ -769,11 +809,11 @@ function renderStages(m) {
     );
 
     const cards = el('div', 'cards');
-    // Sort for reading: the cards you can act on first, then by impact.
-    const actionable = id => m.status.get(id) !== 'skip';
+    // Sort for reading: anything you can rebase first, then impact, and cards
+    // that are merely in-sync-and-downstream last.
+    const rank = id => (drifting.has(id) ? 2 : m.status.get(id) === 'skip' ? 1 : 0);
     const ordered = ids.slice().sort((a, b) =>
-      Number(actionable(b)) - Number(actionable(a)) ||
-      clearsWhen(m, b).length - clearsWhen(m, a).length);
+      rank(a) - rank(b) || clearsWhen(m, b).length - clearsWhen(m, a).length);
     for (const id of ordered) cards.append(card(m, id));
 
     body.append(head, cards);
@@ -795,7 +835,8 @@ function card(m, id) {
   node.classList.add(`is-${st === 'skip'
     ? (m.stale.get(id) ? 'stuck' : 'skip')
     : st === 'stale' || (st !== 'ok' && m.stage.get(id) === 0) ? 'now'
-    : st === 'pr' ? 'pr' : st === 'blocked' ? 'wait' : 'ok'}`);
+    : st === 'pr' ? 'pr' : st === 'blocked' ? 'wait'
+    : m.drifting.has(id) ? 'drift' : 'ok'}`);
   if (state.selected && state.selected !== id) node.classList.add('dim');
   if (state.selected === id) node.classList.add('sel');
 
@@ -819,6 +860,8 @@ function card(m, id) {
     meta.append(chip('skipped · can’t clear', 'stuck'));
   } else if (st === 'skip') {
     meta.append(chip('skipped', 'skip'));
+  } else if (m.drifting.has(id)) {
+    meta.append(chip('in sync · drifts later', 'drift'));
   } else {
     meta.append(chip('in sync', 'ok'));
   }
@@ -829,17 +872,29 @@ function card(m, id) {
   node.append(meta);
 
   const b = m.blockers.get(id) || [];
+  const drifts = m.driftUp.get(id) || [];
   if (b.length) {
     const w = el('div', 'waits');
-    w.append(el('span', 'arrow', '↳'));
+    w.append(el('span', 'waits-label', 'waits on'));
     const names = el('span', 'names');
-    names.append(document.createTextNode('waits on '));
     b.slice(0, 3).forEach((bid, i) => {
       if (i) names.append(document.createTextNode(', '));
       const span = el('span', m.stage.get(bid) === 0 ? 'n-now' : 'n-pending', short(bid));
       names.append(span);
     });
     if (b.length > 3) names.append(document.createTextNode(`, +${b.length - 3}`));
+    w.append(names);
+    node.append(w);
+  } else if (drifts.length) {
+    // In sync now, so nothing blocks it — it just follows whatever it consumes.
+    const w = el('div', 'waits');
+    w.append(el('span', 'waits-label', 'drifts with'));
+    const names = el('span', 'names');
+    drifts.slice(0, 3).forEach((bid, i) => {
+      if (i) names.append(document.createTextNode(', '));
+      names.append(el('span', 'n-pending', short(bid)));
+    });
+    if (drifts.length > 3) names.append(document.createTextNode(`, +${drifts.length - 3}`));
     w.append(names);
     node.append(w);
   }
@@ -856,7 +911,9 @@ function chip(text, kind) { return el('span', `chip ${kind}`, text); }
 
 function renderRest(m) {
   const box = document.getElementById('rest');
-  const done = m.repos.filter(r => !r.skip && m.status.get(r.repo) === 'ok');
+  // Only repos with no relationship to the stack belong here; anything with a
+  // live edge (including in-sync repos that will drift) is a card instead.
+  const done = m.repos.filter(r => !r.skip && m.status.get(r.repo) === 'ok' && !m.drifting.has(r.repo));
   // Skipped-but-blocking repos appear in the stack instead, where the edge into
   // their consumer is visible; listing them twice reads as a contradiction.
   const skipped = m.repos.filter(r => r.skip && !m.stale.get(r.repo));
@@ -919,9 +976,12 @@ function drawEdges(m) {
     const target = rel(id);
     if (!target) continue;
     for (const [depId, v] of deps) {
-      if (v.in_sync) continue;                 // only draw blocking edges
+      // Blocking edges always draw. In-sync edges draw only when both ends are
+      // cards, i.e. the consumer is on the top edge and will drift.
       const src = rel(depId);
       if (!src) continue;
+      const drift = v.in_sync;
+      if (drift && !m.drifting.has(id)) continue;
       const active = !state.selected || state.selected === id || state.selected === depId;
 
       const x1 = src.cx, y1 = src.bottom;
@@ -932,20 +992,14 @@ function drawEdges(m) {
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', d);
       path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', src.top !== undefined && m.stage.get(depId) === 0
-        ? 'var(--now)' : 'var(--wait)');
-      path.setAttribute('stroke-width', active ? 1.6 : 1);
+      path.setAttribute('stroke', drift
+        ? 'var(--ok)'
+        : (m.stage.get(depId) === 0 ? 'var(--now)' : 'var(--wait)'));
+      path.setAttribute('stroke-width', active ? (drift ? 1 : 1.6) : 1);
+      if (drift) path.setAttribute('stroke-dasharray', '3 3');
       path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('opacity', active ? 0.55 : 0.08);
+      path.setAttribute('opacity', active ? (drift ? 0.4 : 0.55) : 0.08);
       svg.append(path);
-
-      // arrowhead
-      const tri = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      tri.setAttribute('points', `${x2},${y2} ${x2 - 4},${y2 - 6} ${x2 + 4},${y2 - 6}`);
-      tri.setAttribute('fill', src.top !== undefined && m.stage.get(depId) === 0
-        ? 'var(--now)' : 'var(--wait)');
-      tri.setAttribute('opacity', active ? 0.75 : 0.1);
-      svg.append(tri);
     }
   }
 }
@@ -1073,7 +1127,7 @@ function renderPanel(m) {
     for (const f of r.cves.findings || []) {
       const tr = el('tr');
       tr.append(el('td', null, `${f.id} · ${f.package}`));
-      const td = el('td', null, f.fixed_version ? `→ ${f.fixed_version}` : 'no fix');
+      const td = el('td', null, f.fixed_version ? `fixed in ${f.fixed_version}` : 'no fix');
       td.style.color = f.fixed_version ? 'var(--ok)' : 'var(--wait)';
       tr.append(td);
       t.append(tr);
