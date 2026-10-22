@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rebase Frontier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --ink: #14171d;
+  --muted: #5f6875;
+  --faint: #8b95a3;
+  --line: #dde1e7;
+  --line-soft: #e8ebef;
+  --accent: #5b4bc4;
+  --accent-soft: #ece9fb;
+  --ok: #1f8a5c;
+  --ok-soft: #e2f4ec;
+  --warn: #a86a10;
+  --warn-soft: #fbf0dc;
+  --pr: #1f5fbf;
+  --pr-soft: #e3edfb;
+  --crit: #b8381c;
+  --crit-soft: #fce8e2;
+  --shadow: 0 1px 2px rgba(20, 23, 29, .06), 0 6px 18px rgba(20, 23, 29, .05);
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101318;
+    --surface: #171b22;
+    --surface-2: #1e232c;
+    --ink: #e4e8ee;
+    --muted: #93a0b0;
+    --faint: #6d7887;
+    --line: #262c37;
+    --line-soft: #1f242d;
+    --accent: #a99bff;
+    --accent-soft: #221f3d;
+    --ok: #45c78d;
+    --ok-soft: #14291f;
+    --warn: #e2ab4a;
+    --warn-soft: #2b2314;
+    --pr: #6fa8f5;
+    --pr-soft: #16233a;
+    --crit: #ff8a63;
+    --crit-soft: #331c14;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101318;
+  --surface: #171b22;
+  --surface-2: #1e232c;
+  --ink: #e4e8ee;
+  --muted: #93a0b0;
+  --faint: #6d7887;
+  --line: #262c37;
+  --line-soft: #1f242d;
+  --accent: #a99bff;
+  --accent-soft: #221f3d;
+  --ok: #45c78d;
+  --ok-soft: #14291f;
+  --warn: #e2ab4a;
+  --warn-soft: #2b2314;
+  --pr: #6fa8f5;
+  --pr-soft: #16233a;
+  --crit: #ff8a63;
+  --crit-soft: #331c14;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 40px;
+}
+.mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+.num { font-variant-numeric: tabular-nums; }
+a { color: inherit; }
+
+/* ---------- header ---------- */
+.top {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 18px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.brand h1 {
+  margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em;
+  text-wrap: balance;
+}
+.brand .sub { font-size: 11px; color: var(--faint); letter-spacing: .02em; }
+.spacer { flex: 1 1 auto; }
+.branches { display: flex; gap: 4px; flex-wrap: wrap; }
+.branch-btn {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 500;
+  padding: 5px 10px; border-radius: 7px; cursor: pointer;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--line);
+  transition: background .12s, color .12s, border-color .12s;
+}
+.branch-btn:hover { background: var(--surface-2); color: var(--ink); }
+.branch-btn[aria-pressed="true"] {
+  background: var(--accent-soft); color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.icon-btn {
+  width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); color: var(--muted);
+  display: grid; place-items: center; font-size: 14px;
+}
+.icon-btn:hover { color: var(--ink); background: var(--surface-2); }
+
+/* ---------- triage banner ---------- */
+.triage {
+  margin-top: 18px;
+  display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.triage-main { flex: 1 1 320px; min-width: 0; }
+.triage-eyebrow {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 5px;
+}
+.triage-line { font-size: 16px; font-weight: 500; line-height: 1.45; text-wrap: pretty; }
+.triage-line .repo { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 15px; }
+.triage-line strong { font-weight: 600; }
+.triage-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.triage-stats { display: flex; gap: 26px; flex-wrap: wrap; }
+.tstat { display: flex; flex-direction: column; gap: 1px; }
+.tstat .v { font-size: 20px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.tstat .k { font-size: 10.5px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
+
+/* ---------- tabs ---------- */
+.tabs { display: flex; gap: 2px; margin-top: 22px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tab {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  font-size: 13px; font-weight: 500; color: var(--muted);
+  padding: 9px 14px 10px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  display: flex; align-items: center; gap: 7px;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab .hint { font-size: 11px; color: var(--faint); font-weight: 400; }
+
+.panel { padding-top: 20px; }
+.panel[hidden] { display: none; }
+
+.legend-row {
+  display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+  font-size: 11.5px; color: var(--muted); margin-bottom: 16px;
+}
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; }
+
+/* ---------- frontier ---------- */
+.frontier-wrap { overflow-x: auto; padding-bottom: 8px; }
+.frontier {
+  display: flex; gap: 14px; min-width: min-content; align-items: flex-start;
+}
+.depth-col { display: flex; flex-direction: column; gap: 8px; min-width: 232px; }
+.depth-head {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 0 2px 7px; border-bottom: 1px solid var(--line);
+}
+.depth-head .n {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600;
+  color: var(--faint);
+}
+.depth-head .t { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.depth-head .c { margin-left: auto; font-size: 10.5px; color: var(--faint); }
+
+.node {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 11px;
+  cursor: pointer;
+  transition: border-color .12s, box-shadow .12s, opacity .12s, transform .12s;
+  min-width: 0;
+}
+.node:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.node.is-root {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 18%, transparent);
+}
+.node.is-blocked { background: color-mix(in srgb, var(--warn-soft) 45%, var(--surface)); }
+.node.is-pr { border-color: color-mix(in srgb, var(--pr) 50%, var(--line)); }
+.node.is-skip { opacity: .5; }
+.node.dim { opacity: .28; }
+.node.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+.node-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.node-name {
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0;
+}
+.node-org { font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); flex: none; }
+.node-meta { display: flex; gap: 7px; align-items: center; margin-top: 5px; flex-wrap: wrap; }
+.chip {
+  font-size: 10px; font-weight: 600; line-height: 1;
+  padding: 3px 6px; border-radius: 5px; white-space: nowrap;
+}
+.chip.state-ok { background: var(--ok-soft); color: var(--ok); }
+.chip.state-warn { background: var(--warn-soft); color: var(--warn); }
+.chip.state-pr { background: var(--pr-soft); color: var(--pr); }
+.chip.state-skip { background: var(--surface-2); color: var(--faint); }
+.chip.cve { background: var(--crit-soft); color: var(--crit); }
+.chip.ghost { background: transparent; color: var(--faint); padding-left: 0; }
+.root-tag {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--warn);
+}
+.cascade-tag { font-size: 10px; color: var(--faint); }
+
+/* connector svg overlay */
+.frontier-inner { position: relative; }
+#edges { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 0; }
+.frontier { position: relative; z-index: 1; }
+
+/* ---------- matrix ---------- */
+.matrix-wrap { overflow-x: auto; }
+table.matrix { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 560px; }
+.matrix th, .matrix td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--line-soft); }
+.matrix thead th {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--faint); position: sticky; top: 0; background: var(--bg); z-index: 2;
+  border-bottom: 1px solid var(--line);
+}
+.matrix thead th:first-child { padding-left: 0; }
+.matrix tbody td:first-child { padding-left: 0; }
+.matrix .repo-cell {
+  font-family: "IBM Plex Mono", monospace; font-size: 12px;
+  white-space: nowrap;
+}
+.matrix .repo-cell .org { color: var(--faint); }
+.matrix tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.cell { display: flex; align-items: center; gap: 6px; }
+.wave-badge {
+  font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600;
+  color: var(--muted); background: var(--surface-2);
+  border-radius: 4px; padding: 2px 5px; line-height: 1.2; min-width: 24px; text-align: center;
+}
+.cell .cve-n { font-size: 10px; font-weight: 600; color: var(--crit); }
+.absent { color: var(--faint); font-size: 11px; }
+.matrix tfoot td { font-size: 11px; color: var(--muted); padding-top: 10px; }
+
+/* ---------- triage list ---------- */
+.queue { display: flex; flex-direction: column; gap: 10px; }
+.qitem {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 13px 15px; display: flex; gap: 14px; align-items: flex-start;
+  box-shadow: var(--shadow);
+}
+.qrank {
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+  color: var(--accent); background: var(--accent-soft);
+  width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; flex: none;
+}
+.qbody { flex: 1 1 auto; min-width: 0; }
+.qtitle { font-size: 14px; font-weight: 500; }
+.qtitle .repo { font-family: "IBM Plex Mono", monospace; font-weight: 600; }
+.qlists { display: flex; gap: 22px; margin-top: 7px; flex-wrap: wrap; }
+.qlist { min-width: 0; }
+.qlist .k { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); margin-bottom: 3px; }
+.qlist .v { font-size: 12px; color: var(--muted); font-family: "IBM Plex Mono", monospace; line-height: 1.65; }
+.qaction {
+  flex: none; font-size: 11.5px; font-weight: 600; text-decoration: none;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft); padding: 6px 11px; border-radius: 7px; white-space: nowrap;
+}
+.qaction:hover { filter: brightness(.97); }
+.empty-state { color: var(--muted); font-size: 13px; padding: 24px 0; }
+
+/* ---------- gaps ---------- */
+.gaps { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 20px; }
+.gaps h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+.gaps > p { font-size: 12px; color: var(--muted); margin: 0 0 14px; max-width: 68ch; }
+.gap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+.gap-card {
+  border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px;
+  background: var(--surface); min-width: 0;
+}
+.gap-card h3 { font-size: 12px; font-weight: 600; margin: 0 0 4px; display: flex; gap: 7px; align-items: center; }
+.gap-card p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.55; }
+.gap-card code { font-family: "IBM Plex Mono", monospace; font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+.live-note { font-size: 11px; color: var(--faint); margin-top: 14px; }
+
+@media (max-width: 620px) {
+  .triage { padding: 14px; }
+  .triage-stats { gap: 18px; }
+  .depth-col { min-width: 210px; }
+  .qitem { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">
+    <h1>Rebase Frontier</h1>
+    <span class="sub">What actually unblocks the release</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="branches" id="branches" role="group" aria-label="Release branch"></div>
+  <button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">◐</button>
+</div>
+
+<section class="triage" id="triageCard">
+  <div class="triage-main">
+    <div class="triage-eyebrow" id="triageEyebrow">Start here</div>
+    <div class="triage-line" id="triageLine">Loading…</div>
+    <div class="triage-note" id="triageNote"></div>
+  </div>
+  <div class="triage-stats" id="triageStats"></div>
+</section>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" id="tab-frontier" aria-selected="true" aria-controls="panel-frontier">
+    Frontier <span class="hint">true dependency depth</span>
+  </button>
+  <button class="tab" role="tab" id="tab-matrix" aria-selected="false" aria-controls="panel-matrix">
+    Across releases <span class="hint">repo × branch</span>
+  </button>
+  <button class="tab" role="tab" id="tab-queue" aria-selected="false" aria-controls="panel-queue">
+    Action queue <span class="hint">ordered work</span>
+  </button>
+</div>
+
+<div class="panel" id="panel-frontier" role="tabpanel" aria-labelledby="tab-frontier">
+  <div class="legend-row" id="frontierLegend"></div>
+  <div class="frontier-wrap">
+    <div class="frontier-inner" id="frontierInner">
+      <svg id="edges" aria-hidden="true"></svg>
+      <div class="frontier" id="frontier"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panel-matrix" role="tabpanel" aria-labelledby="tab-matrix" hidden>
+  <div class="legend-row">
+    <span class="legend-item"><span class="dot" style="background:var(--ok)"></span>synced</span>
+    <span class="legend-item"><span class="dot" style="background:var(--warn)"></span>blocked</span>
+    <span class="legend-item"><span class="dot" style="background:var(--pr)"></span>PR open</span>
+    <span class="legend-item"><span class="dot" style="background:var(--faint)"></span>not on branch</span>
+    <span style="margin-left:auto;color:var(--faint)">wave badge = declared wave · number = critical CVEs</span>
+  </div>
+  <div class="matrix-wrap"><table class="matrix" id="matrix"></table></div>
+</div>
+
+<div class="panel" id="panel-queue" role="tabpanel" aria-labelledby="tab-queue" hidden>
+  <div class="legend-row">
+    <span>Ranked by how much each action unblocks.</span>
+    <span style="margin-left:auto;color:var(--faint)" id="queueCount"></span>
+  </div>
+  <div class="queue" id="queue"></div>
+</div>
+
+<section class="gaps">
+  <h2>What this view knows that the current dashboard can't say</h2>
+  <p>These are data-model gaps found while deriving the views above. Each one is a real
+  misreading a viewer can make from today's cards.</p>
+  <div class="gap-grid" id="gapGrid"></div>
+  <div class="live-note" id="liveNote"></div>
+</section>
+
+<script type="module">
+const RAW = 'https://raw.githubusercontent.com/oadp-rebasebot/oadp-rebase/dashboard-data';
+const BRANCHES = ['oadp-dev', 'oadp-1.6', 'oadp-1.5', 'oadp-1.4', 'oadp-1.3'];
+
+const state = { branch: 'oadp-1.6', data: {}, selected: null, tab: 'frontier' };
+
+/* ---------- data ---------- */
+async function load(branch) {
+  if (state.data[branch]) return state.data[branch];
+  const res = await fetch(`${RAW}/dag-${branch}.json`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(res.statusText);
+  const raw = await res.json();
+  const snap = Array.isArray(raw) ? { repos: raw, cve_prs: [] } : raw;
+  state.data[branch] = derive(snap.repos || [], snap.cve_prs || [], branch);
+  return state.data[branch];
+}
+
+function repoId(d) { return `${d.org}/${d.repo}`; }
+
+function classify(r) {
+  if (r.skip) return 'skip';
+  if ((r.checks?.open_pr || {}).status === 'ok') return 'pr';
+  const ds = (r.checks?.dep_sync || {}).status;
+  if (ds === 'fail' || ds === 'warn') return 'blocked';
+  return 'ok';
+}
+
+/**
+ * Turn a snapshot into the model the views need: deduped dependency edges,
+ * true depth, and a distinction between a repo that is itself actionable and
+ * one that is only failing because something upstream hasn't landed yet.
+ */
+function derive(repos, cvePRs, branch) {
+  const byId = new Map(repos.map(r => [r.repo, r]));
+  const ids = new Set(byId.keys());
+
+  // dep_syncs can list the same dependency twice (different module paths,
+  // same repo). Count a repo once, and keep the worse of the two states.
+  const deps = new Map();
+  for (const r of repos) {
+    const m = new Map();
+    for (const d of r.dep_syncs || []) {
+      const id = repoId(d);
+      if (!ids.has(id)) continue;
+      const prev = m.get(id);
+      if (!prev || (prev.in_sync && !d.in_sync)) {
+        m.set(id, { in_sync: d.in_sync, commits: (d.commits || []).length, duplicate: !!prev });
+      } else {
+        prev.duplicate = true;
+      }
+    }
+    deps.set(r.repo, m);
+  }
+
+  const depth = new Map();
+  const depthOf = (id, seen = new Set()) => {
+    if (depth.has(id)) return depth.get(id);
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const d = [...(deps.get(id)?.keys() || [])];
+    const v = d.length ? Math.max(...d.map(x => depthOf(x, seen))) + 1 : 0;
+    depth.set(id, v);
+    return v;
+  };
+  for (const r of repos) depthOf(r.repo);
+
+  const status = new Map(repos.map(r => [r.repo, classify(r)]));
+  const blockedBy = new Map();
+  for (const r of repos) {
+    blockedBy.set(r.repo, [...(deps.get(r.repo) || new Map())].filter(([, v]) => !v.in_sync).map(([k]) => k));
+  }
+
+  const dependents = new Map(repos.map(r => [r.repo, []]));
+  for (const r of repos) for (const d of deps.get(r.repo).keys()) dependents.get(d)?.push(r.repo);
+
+  // A repo is *stale to its consumers* when someone downstream pins an older
+  // commit of it than its branch head. That is the signal the feed actually
+  // has; dep_sync on the repo itself cannot express it, because a repo with no
+  // internal deps always scans clean no matter how far its own head has moved.
+  const staleToConsumers = new Map();
+  for (const r of repos) staleToConsumers.set(r.repo, false);
+  for (const r of repos) {
+    for (const [depId, info] of deps.get(r.repo)) {
+      if (!info.in_sync) staleToConsumers.set(depId, true);
+    }
+  }
+
+  // Roots are the repos that need a rebase and nothing upstream of them does:
+  // either the repo's head moved ahead of its consumers, or its own dep check
+  // failed, and in both cases none of its internal deps is itself waiting.
+  const isRoot = new Map();
+  for (const r of repos) {
+    if (r.skip) { isRoot.set(r.repo, false); continue; }
+    const ownDepsWaiting = blockedBy.get(r.repo).length > 0;
+    const needsWork = staleToConsumers.get(r.repo) || status.get(r.repo) === 'blocked';
+    isRoot.set(r.repo, needsWork && !ownDepsWaiting);
+  }
+
+  // Everything else that is blocked is only waiting on a root.
+  const consequence = new Map();
+  for (const r of repos) {
+    consequence.set(r.repo, !isRoot.get(r.repo) && blockedBy.get(r.repo).length > 0);
+  }
+
+  return {
+    branch,
+    repos, cvePRs, byId, deps, depth, status, blockedBy, dependents,
+    isRoot, consequence, staleToConsumers,
+    cveTotals: repos.reduce((a, r) => {
+      const c = r.cves;
+      if (!c) return a;
+      a.critical += c.critical || 0; a.high += c.high || 0; a.fixable += c.fixable || 0;
+      return a;
+    }, { critical: 0, high: 0, fixable: 0 }),
+  };
+}
+
+/* ---------- helpers ---------- */
+const el = (tag, cls, txt) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (txt != null) n.textContent = txt;
+  return n;
+};
+const shortName = id => id.split('/')[1] ?? id;
+const orgName = id => id.split('/')[0] ?? '';
+
+/* ---------- triage ---------- */
+function renderTriage(m) {
+  // Two groups, kept separate: repos that need work on their own, and repos
+  // that show outdated purely because they pin something upstream.
+  const active = m.repos.filter(r => !r.skip);
+  const roots = [...m.isRoot].filter(([, v]) => v).map(([k]) => k);
+  const consequential = active.filter(r => m.status.get(r.repo) === 'blocked' && !m.isRoot.get(r.repo));
+  const blocked = active.filter(r => m.status.get(r.repo) === 'blocked').length;
+  const prs = active.filter(r => m.status.get(r.repo) === 'pr').length;
+  const synced = active.filter(r => m.status.get(r.repo) === 'ok').length;
+
+  // rank roots by how many currently-blocked repos become actionable
+  const ranked = roots
+    .map(id => ({ id, fanout: unblocksFrom(m, id) }))
+    .sort((a, b) => b.fanout - a.fanout);
+
+  const line = document.getElementById('triageLine');
+  const note = document.getElementById('triageNote');
+  const eyebrow = document.getElementById('triageEyebrow');
+
+  if (!active.length) {
+    eyebrow.textContent = 'No data';
+    line.textContent = `No snapshot published for ${m.branch}.`;
+    note.textContent = '';
+  } else if (!blocked && !prs && !ranked.length) {
+    eyebrow.textContent = 'Clear';
+    line.innerHTML = `Every repo on <strong>${m.branch}</strong> is in sync.`;
+    note.textContent = m.cveTotals.critical || m.cveTotals.high
+      ? `Still open: ${m.cveTotals.critical} critical and ${m.cveTotals.high} high CVE findings — separate from rebase state.`
+      : 'Nothing waiting.';
+  } else if (ranked.length) {
+    const top = ranked[0];
+    eyebrow.textContent = 'Start here';
+    line.innerHTML = ranked.length === 1
+      ? `Rebase <span class="repo">${top.id}</span> — it is the only repo on <strong>${m.branch}</strong> that needs work.`
+      : `Rebase <span class="repo">${top.id}</span> first — <strong>${ranked.length}</strong> repos on <strong>${m.branch}</strong> need work on their own.`;
+    const parts = [];
+    if (ranked.length > 1) parts.push('None of them depends on another, so order does not matter.');
+    if (consequential.length) {
+      parts.push(`${consequential.length} other orange ${consequential.length === 1 ? 'card is' : 'cards are'} only waiting on upstream merges — no separate rebase needed.`);
+    }
+    if (top.fanout) parts.push(`Landing ${shortName(top.id)} clears ${top.fanout} of them.`);
+    if (!parts.length) parts.push('Nothing else is independently actionable.');
+    note.innerHTML = parts.join(' ');
+  } else {
+    eyebrow.textContent = 'In flight';
+    line.innerHTML = `No repo on <strong>${m.branch}</strong> is independently actionable right now.`;
+    note.textContent = prs ? `${prs} rebase PR${prs === 1 ? ' is' : 's are'} open; blocked repos clear once those merge.` : '';
+  }
+
+  const stats = document.getElementById('triageStats');
+  stats.replaceChildren(
+    stat(synced, 'in sync', 'var(--ok)'),
+    stat(prs, 'PR open', 'var(--pr)'),
+    stat(blocked, 'blocked', 'var(--warn)'),
+    stat(m.cveTotals.critical, 'critical CVEs', 'var(--crit)'),
+  );
+}
+
+function stat(v, k, color) {
+  const d = el('div', 'tstat');
+  const val = el('div', 'v', String(v));
+  val.style.color = color;
+  d.append(val, el('div', 'k', k));
+  return d;
+}
+
+/** Repos currently blocked that would become actionable if `id` were synced. */
+function unblocksFrom(m, id) {
+  const seen = new Set([id]);
+  const queue = [id];
+  let count = 0;
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const dep of m.dependents.get(cur) || []) {
+      if (seen.has(dep)) continue;
+      seen.add(dep);
+      queue.push(dep);
+      if (m.status.get(dep) === 'blocked') count++;
+    }
+  }
+  return count;
+}
+
+/* ---------- frontier ---------- */
+function renderFrontier(m) {
+  const wrap = document.getElementById('frontier');
+  const svg = document.getElementById('edges');
+  wrap.replaceChildren();
+  svg.replaceChildren();
+
+  const legend = document.getElementById('frontierLegend');
+  legend.replaceChildren(
+    legendItem('var(--warn)', 'start here — nothing upstream holds it up'),
+    legendItem('var(--ok)', 'in sync'),
+    legendItem('var(--pr)', 'rebase PR open'),
+    legendItem('var(--faint)', 'waiting on something upstream'),
+  );
+
+  const depths = [...new Set(m.repos.map(r => m.depth.get(r.repo)))].sort((a, b) => a - b);
+  const depthLabel = d => d === 0 ? 'No internal deps' : d === 1 ? 'One hop deep' : `${d} hops deep`;
+
+  for (const d of depths) {
+    const col = el('div', 'depth-col');
+    const head = el('div', 'depth-head');
+    head.append(
+      el('span', 'n', String(d + 1).padStart(2, '0')),
+      el('span', 't', depthLabel(d)),
+    );
+    const n = m.repos.filter(r => m.depth.get(r.repo) === d).length;
+    head.append(el('span', 'c', `${n}`));
+    col.append(head);
+
+    const rows = m.repos.filter(r => m.depth.get(r.repo) === d)
+      .sort((a, b) => {
+        const ar = m.isRoot.get(a.repo) ? 0 : 1, br = m.isRoot.get(b.repo) ? 0 : 1;
+        return ar - br || a.repo.localeCompare(b.repo);
+      });
+    for (const r of rows) col.append(nodeEl(m, r));
+    wrap.append(col);
+  }
+
+  drawEdges(m);
+}
+
+function legendItem(color, label) {
+  const s = el('span', 'legend-item');
+  const dot = el('span', 'dot');
+  dot.style.background = color;
+  s.append(dot, document.createTextNode(label));
+  return s;
+}
+
+function nodeEl(m, r) {
+  const status = m.status.get(r.repo);
+  const root = m.isRoot.get(r.repo);
+  const node = el('div', 'node');
+  node.dataset.id = r.repo;
+  node.tabIndex = 0;
+  node.setAttribute('role', 'button');
+  if (root) node.classList.add('is-root');
+  if (status === 'blocked') node.classList.add('is-blocked');
+  if (status === 'pr') node.classList.add('is-pr');
+  if (status === 'skip') node.classList.add('is-skip');
+  if (m.selected) node.classList.add(relevant(m, r.repo) ? 'sel' : 'dim');
+
+  const top = el('div', 'node-top');
+  top.append(el('span', 'node-name', shortName(r.repo)), el('span', 'node-org', orgName(r.repo)));
+  node.append(top);
+
+  const meta = el('div', 'node-meta');
+  if (root) {
+    // Distinguish "its own head moved ahead of its consumers" from "its dep
+    // check failed". The first scans as in sync today and hides the real work.
+    meta.append(el('span', 'root-tag', 'start here'));
+    if (status === 'ok') meta.append(chip('behind consumers', 'state-warn'));
+    else if (status === 'blocked') meta.append(chip(`deps behind · ${m.blockedBy.get(r.repo).length}`, 'state-warn'));
+  } else if (status === 'ok') {
+    meta.append(chip('In sync', 'state-ok'));
+  } else if (status === 'pr') {
+    const pr = r.checks?.open_pr?.summary || 'PR';
+    meta.append(chip(`PR ${pr}`, 'state-pr'));
+  } else if (status === 'blocked') {
+    const b = m.blockedBy.get(r.repo).length;
+    meta.append(chip(`waiting · ${b}`, 'state-warn'));
+  } else if (status === 'skip') {
+    meta.append(chip('skipped', 'state-skip'));
+  }
+
+  const c = r.cves;
+  if (c && (c.critical || c.high)) {
+    meta.append(chip(c.critical ? `${c.critical} crit` : `${c.high} high`, 'cve'));
+  }
+
+  const tag = r.upstream ? r.upstream.split(' @ ')[0] : null;
+  if (tag && !root) meta.append(el('span', 'chip ghost', tag));
+  node.append(meta);
+
+  const onClick = () => {
+    state.selected = state.selected === r.repo ? null : r.repo;
+    renderFrontier(m);
+  };
+  node.addEventListener('click', onClick);
+  node.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+  });
+  return node;
+}
+
+function chip(text, cls) { return el('span', `chip ${cls}`, text); }
+
+function relevant(m, id) {
+  if (!m.selected) return true;
+  if (id === m.selected) return true;
+  const s = m.selected;
+  return m.blockedBy.get(s)?.includes(id) || m.blockedBy.get(id)?.includes(s)
+    || (m.dependents.get(s) || []).includes(id) || (m.dependents.get(id) || []).includes(s);
+}
+
+function drawEdges(m) {
+  const svg = document.getElementById('edges');
+  const inner = document.getElementById('frontierInner');
+  const ib = inner.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${inner.scrollWidth} ${inner.scrollHeight}`);
+  svg.setAttribute('width', inner.scrollWidth);
+  svg.setAttribute('height', inner.scrollHeight);
+  svg.replaceChildren();
+
+  const rects = new Map();
+  for (const node of inner.querySelectorAll('.node')) {
+    const b = node.getBoundingClientRect();
+    rects.set(node.dataset.id, {
+      left: b.left - ib.left + inner.scrollLeft,
+      right: b.right - ib.left + inner.scrollLeft,
+      mid: (b.top + b.bottom) / 2 - ib.top + inner.scrollTop,
+    });
+  }
+
+  for (const [id, deps] of m.deps) {
+    const to = rects.get(id);
+    if (!to) continue;
+    for (const [depId, info] of deps) {
+      const from = rects.get(depId);
+      if (!from) continue;
+      const active = m.selected && (id === m.selected || depId === m.selected);
+      const x1 = from.right, x2 = to.left;
+      const midX = (x1 + x2) / 2;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${x1} ${from.mid} L ${midX} ${from.mid} L ${midX} ${to.mid} L ${x2} ${to.mid}`);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', info.in_sync ? 'var(--ok)' : 'var(--warn)');
+      path.setAttribute('stroke-width', active ? 2 : info.in_sync ? 1 : 1.4);
+      path.setAttribute('opacity', m.selected ? (active ? .85 : .12) : info.in_sync ? .22 : .32);
+      if (!info.in_sync) path.setAttribute('stroke-dasharray', '5 4');
+      svg.append(path);
+    }
+  }
+}
+
+/* ---------- matrix ---------- */
+async function renderMatrix() {
+  const table = document.getElementById('matrix');
+  const loaded = [];
+  for (const b of BRANCHES) {
+    try { loaded.push(await load(b)); } catch { /* skip branch with no snapshot */ }
+  }
+  if (!loaded.length) { table.replaceChildren(el('tbody')); return; }
+
+  const union = new Set();
+  for (const m of loaded) for (const r of m.repos) union.add(r.repo);
+  const rows = [...union].sort();
+
+  const thead = el('thead');
+  const hr = el('tr');
+  hr.append(el('th', null, 'Repository'));
+  for (const m of loaded) hr.append(el('th', null, m.branch.replace('oadp-', '')));
+  hr.append(el('th', null, 'drift'));
+  thead.append(hr);
+
+  const tbody = el('tbody');
+  for (const repo of rows) {
+    const tr = el('tr');
+    const rc = el('td', 'repo-cell');
+    rc.innerHTML = `<span class="org">${orgName(repo)}/</span>${shortName(repo)}`;
+    tr.append(rc);
+
+    let firstWave = null;
+    for (const m of loaded) {
+      const td = el('td');
+      const r = m.byId.get(repo);
+      if (!r) {
+        td.append(el('span', 'absent', '—'));
+      } else {
+        const st = m.status.get(repo);
+        const cell = el('div', 'cell');
+        const dot = el('span', 'dot');
+        dot.style.background = `var(--${st === 'ok' ? 'ok' : st === 'blocked' ? 'warn' : st === 'pr' ? 'pr' : 'faint'})`;
+        cell.append(dot);
+        cell.append(el('span', 'wave-badge', r.skip ? 'skip' : `w${r.wave}`));
+        const crit = r.cves?.critical || 0;
+        if (crit) cell.append(el('span', 'cve-n', `${crit}`));
+        td.append(cell);
+        if (firstWave == null) firstWave = r.wave;
+      }
+      tr.append(td);
+    }
+
+    // drift: does the declared wave differ between releases?
+    const waves = loaded.map(m => m.byId.get(repo)?.wave).filter(w => w != null);
+    const drift = new Set(waves).size > 1 ? `w${Math.min(...waves)}→w${Math.max(...waves)}` : '';
+    const driftCell = el('td', 'absent', drift);
+    tr.append(driftCell);
+    tbody.append(tr);
+  }
+
+  const tfoot = el('tfoot');
+  const fr = el('tr');
+  const fc = el('td', null, `${rows.length} repositories across ${loaded.length} releases`);
+  fc.colSpan = loaded.length + 2;
+  fr.append(fc);
+  tfoot.append(fr);
+
+  table.replaceChildren(thead, tbody, tfoot);
+}
+
+/* ---------- action queue ---------- */
+function renderQueue(m) {
+  const root = document.getElementById('queue');
+  root.replaceChildren();
+
+  const roots = [...m.isRoot].filter(([, v]) => v).map(([k]) => k)
+    .map(id => ({ id, fanout: unblocksFrom(m, id) }))
+    .sort((a, b) => b.fanout - a.fanout);
+
+  document.getElementById('queueCount').textContent =
+    roots.length ? `${roots.length} independent action${roots.length === 1 ? '' : 's'}` : '';
+
+  if (!roots.length) {
+    root.append(el('div', 'empty-state', 'Nothing actionable on this branch. Every repo is either in sync or waiting on work that is already in flight.'));
+    return;
+  }
+
+  roots.forEach((r, i) => {
+    const item = el('div', 'qitem');
+    item.append(el('div', 'qrank', String(i + 1)));
+
+    const body = el('div', 'qbody');
+    const title = el('div', 'qtitle');
+    const repo = m.byId.get(r.id);
+    title.innerHTML = `Rebase <span class="repo">${r.id}</span>`;
+    const c = repo?.cves;
+    if (c && (c.critical || c.high)) {
+      const t = el('span');
+      t.style.cssText = 'margin-left:8px';
+      t.append(chip(c.critical ? `${c.critical} critical` : `${c.high} high`, 'cve'));
+      title.append(t);
+    }
+    body.append(title);
+
+    const lists = el('div', 'qlists');
+    const unblocks = el('div', 'qlist');
+    unblocks.append(el('div', 'k', 'unblocks'));
+    const names = [...new Set(descendants(m, r.id))];
+    unblocks.append(el('div', 'v', names.length ? names.join(', ') : 'nothing downstream'));
+    lists.append(unblocks);
+
+    const blockers = el('div', 'qlist');
+    blockers.append(el('div', 'k', 'waiting on'));
+    const b = m.blockedBy.get(r.id) || [];
+    blockers.append(el('div', 'v', b.length ? b.join(', ') : 'nothing — clear to run'));
+    lists.append(blockers);
+    body.append(lists);
+    item.append(body);
+
+    const link = el('a', 'qaction', 'Run rebase ↗');
+    link.href = 'https://github.com/oadp-rebasebot/oadp-rebase/actions/workflows/auto-rebase-v2.yaml';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    item.append(link);
+    root.append(item);
+  });
+}
+
+function descendants(m, id) {
+  const seen = new Set([id]);
+  const q = [id];
+  const out = [];
+  while (q.length) {
+    const cur = q.shift();
+    for (const d of m.dependents.get(cur) || []) {
+      if (seen.has(d)) continue;
+      seen.add(d); q.push(d); out.push(d);
+    }
+  }
+  return out;
+}
+
+/* ---------- data gaps ---------- */
+function renderGaps() {
+  const grid = document.getElementById('gapGrid');
+  const cards = [
+    ['Wave is not depth',
+      'The legend says columns are dependency depth, but columns are the declared wave. On 1.4 five repos sit in the wrong column; on 1.6 four do. A viewer reads "wave 4" as "four hops deep" and gets the ordering wrong.'],
+    ['One job looks like fifteen',
+      'Blocked state is a consequence of an upstream dep, but cards render it identically to independent work. On 1.6, fifteen cards read "outdated" and every one is waiting on kopia alone; the dashboard gives no hint they are one cascade rather than fifteen tasks.'],
+    ['A root blocker can look green',
+      'A repo with no internal deps always classifies as synced, even when its own upstream tag moved. kopia is the single blocker on 1.6 and scans as in sync, because <code>upstream</code> is a tag string with no compared-downstream field. The only trace is that everything pinning it is behind.'],
+    ['CVEs are invisible in status',
+      'Status is computed only from <code>open_pr</code> and <code>dep_sync</code>. On 1.3 the branch carries 1 critical and 92 high findings while most cards read synced. Severity lives in a sub-card, so the summary bar cannot count it.'],
+    ['Duplicates inflate counts',
+      '<code>dep_syncs</code> can list one repo twice under different module paths. oadp-must-gather reports "5 internal dep(s) out of sync" for three distinct repos, and the duplicated edges double the lines drawn.'],
+    ['No per-repo freshness in the view',
+      '<code>scanned_at</code> exists per repo, but the dashboard surfaces only a single branch-level timestamp. Mixed scan ages read as equally current.'],
+  ];
+  for (const [title, body] of cards) {
+    const card = el('div', 'gap-card');
+    card.append(el('h3', null, title));
+    const p = el('p');
+    p.innerHTML = body;
+    card.append(p);
+    grid.append(card);
+  }
+}
+
+/* ---------- wiring ---------- */
+function renderBranches() {
+  const box = document.getElementById('branches');
+  box.replaceChildren();
+  for (const b of BRANCHES) {
+    const btn = el('button', 'branch-btn', b);
+    btn.setAttribute('aria-pressed', String(b === state.branch));
+    btn.addEventListener('click', () => select(b));
+    box.append(btn);
+  }
+}
+
+async function select(branch) {
+  state.branch = branch;
+  state.selected = null;
+  renderBranches();
+  const m = await load(branch);
+  renderTriage(m);
+  renderFrontier(m);
+  renderQueue(m);
+  if (state.tab === 'matrix') await renderMatrix();
+  document.getElementById('liveNote').textContent =
+    `Live snapshot: raw.githubusercontent.com/oadp-rebasebot/oadp-rebase/dashboard-data · viewing ${branch}`;
+}
+
+function switchTab(tab) {
+  state.tab = tab;
+  for (const t of ['frontier', 'matrix', 'queue']) {
+    document.getElementById(`tab-${t}`).setAttribute('aria-selected', String(t === tab));
+    document.getElementById(`panel-${t}`).hidden = t !== tab;
+  }
+  if (tab === 'matrix') renderMatrix();
+}
+
+document.getElementById('tab-frontier').addEventListener('click', () => switchTab('frontier'));
+document.getElementById('tab-matrix').addEventListener('click', () => switchTab('matrix'));
+document.getElementById('tab-queue').addEventListener('click', () => switchTab('queue'));
+
+const themeToggle = document.getElementById('themeToggle');
+function currentTheme() {
+  const explicit = document.documentElement.dataset.theme;
+  if (explicit) return explicit;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function applyTheme(theme) {
+  // Only pin data-theme when the viewer chooses one; otherwise let
+  // prefers-color-scheme drive the tokens so the OS setting is respected.
+  if (theme) document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  themeToggle.textContent = currentTheme() === 'dark' ? '☀' : '◐';
+}
+function storedTheme() {
+  try { return localStorage.getItem('rf-theme'); } catch { return null; }
+}
+applyTheme(storedTheme());
+themeToggle.addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('rf-theme', next); } catch { /* private mode */ }
+  applyTheme(next);
+});
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const m = state.data[state.branch];
+    if (m && state.tab === 'frontier') drawEdges(m);
+  }, 120);
+});
+
+renderGaps();
+renderBranches();
+const wanted = new URLSearchParams(location.search).get('branch');
+const initial = BRANCHES.includes(wanted) ? wanted : 'oadp-1.6';
+select(initial).catch(err => {
+  document.getElementById('triageLine').textContent = 'Could not load live data: ' + err.message;
+});
+</script>
+</body>
+</html>
